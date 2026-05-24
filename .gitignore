@@ -15,6 +15,7 @@ build/
 fabric-samples/
 bin/
 config/
+install-fabric.sh
 
 # Model weights (27MB+, không commit binary)
 flask-server/model/*.pt
