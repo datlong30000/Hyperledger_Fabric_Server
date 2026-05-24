@@ -22,13 +22,14 @@ Lần đầu setup chi tiết từ con số 0: xem [docs/runbook.md](docs/runboo
 
 Script sẽ tự download Hyperledger Fabric (nếu chưa có), dựng blockchain, deploy chaincode, build và bật server. **Lần đầu mất ~15 phút** (kéo Fabric binaries + Docker images + Torch ~500MB). Các lần sau dưới 30 giây.
 
-Khi thấy banner `=== READY ===`, mở 3 link sau để xác nhận:
+Khi thấy banner `=== READY ===`, mở các link sau để xác nhận:
 
 | | URL | Dùng để |
 |---|---|---|
+| **Dashboard** | http://localhost:3000 | Trang web xem records, map, ảnh — **vào đây trước** |
 | Trạng thái AI server | http://localhost:5000/health | Phải trả `{"status":"ok"}` |
 | Trạng thái blockchain bridge | http://localhost:3000/health | Phải trả `{"status":"ok"}` |
-| Xem dữ liệu đã lưu | http://localhost:5984/_utils | Login `admin` / `adminpw`, chọn database `mychannel_harvest-cc` |
+| Raw blockchain data | http://localhost:5984/_utils | Login `admin` / `adminpw`, chọn database `mychannel_harvest-cc` |
 
 ## Gửi 1 ảnh và xem kết quả
 
@@ -96,11 +97,26 @@ ID record được derive từ hash ảnh (`harvest-<hash[:16]>`), nên cùng 1 
 
 ## Xem tất cả records đã lưu
 
+**Cách 1 — Web dashboard (đẹp, dành cho giám khảo + người không phải dev):**
+
+Mở http://localhost:3000 trên trình duyệt. Có:
+
+- 4 thẻ thống kê: Total / Fresh / Unripe / Rotten
+- Map Leaflet với marker ở vị trí GPS của từng record (màu theo category)
+- Lưới các "harvest card" — click vào hiện modal full ảnh + chi tiết SHA-256, có nút Copy hash
+- Filter chip Fresh / Unripe / Rotten
+- Auto-refresh mỗi 30 giây, kèm nút Refresh thủ công
+- Nút **Reset demo** ở header → hiện modal hướng dẫn `./stop.sh --purge && ./start.sh` để wipe sạch cho lần demo tiếp theo
+
+**Cách 2 — JSON cho dev/script:**
+
 ```bash
 curl http://localhost:3000/records
 ```
 
-Hoặc mở Fauxton ở http://localhost:5984/_utils → chọn database `mychannel_harvest-cc` → nhìn từng document.
+**Cách 3 — Raw CouchDB (debug):**
+
+Mở Fauxton ở http://localhost:5984/_utils → chọn database `mychannel_harvest-cc` → nhìn từng document.
 
 ## Dùng mock client để spam thử
 
@@ -130,6 +146,7 @@ Hoang/
 ├── flask-server/         AI server (Flask + YOLO)
 │   └── model/best.pt     File model (gitignored, xin riêng)
 ├── node-bridge/          Cầu nối từ Flask sang blockchain (Node.js)
+│   └── public/           Web dashboard (HTML + CSS + JS, no framework)
 ├── chaincode/            Code chạy bên trong blockchain (Node.js)
 ├── mock-client/          Trình giả lập client
 │   └── sample-images/    9 ảnh mẫu (1 ảnh/lớp)
