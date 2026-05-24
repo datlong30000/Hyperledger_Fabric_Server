@@ -37,13 +37,13 @@ Tải tại docker.com → cài → mở Settings → **Resources → WSL Integr
 
 Verify: `docker ps` chạy được trong WSL không cần sudo.
 
-### 3. Cài `jq`
+### 3. `jq` — không cần cài thủ công
 
-Trên Ubuntu 26 minimal không có sẵn:
+`start.sh` tự kiểm tra và download `jq` vào `~/.local/bin/` nếu thiếu. Nếu muốn cài trước cũng được:
 
 ```bash
-curl -fsSL https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64 -o ~/.local/bin/jq
-chmod +x ~/.local/bin/jq
+sudo apt-get install -y jq      # hoặc
+curl -fsSL https://github.com/jqlang/jq/releases/download/jq-1.7.1/jq-linux-amd64 -o ~/.local/bin/jq && chmod +x ~/.local/bin/jq
 ```
 
 ### 4. Clone repo + cài Fabric

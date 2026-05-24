@@ -11,6 +11,26 @@ COMPOSE_FILE="$ROOT/docker-compose.app.yml"
 CHANNEL="${CHANNEL:-mychannel}"
 CC_NAME="${CC_NAME:-harvest-cc}"
 CC_PATH="$ROOT/chaincode"
+JQ_VERSION="${JQ_VERSION:-1.7.1}"
+
+# --- Step 0: Dependency check ---
+if ! command -v curl >/dev/null 2>&1; then
+    echo "[start] ERROR: 'curl' not found. Install with: sudo apt-get install -y curl"
+    exit 1
+fi
+
+if ! command -v jq >/dev/null 2>&1; then
+    echo "[start] jq not found — auto-installing $JQ_VERSION to ~/.local/bin..."
+    mkdir -p "$HOME/.local/bin"
+    if ! curl -fsSL "https://github.com/jqlang/jq/releases/download/jq-${JQ_VERSION}/jq-linux-amd64" \
+            -o "$HOME/.local/bin/jq"; then
+        echo "[start] ERROR: failed to download jq. Check network connection."
+        exit 1
+    fi
+    chmod +x "$HOME/.local/bin/jq"
+    export PATH="$HOME/.local/bin:$PATH"
+    echo "[start] jq installed: $(jq --version)"
+fi
 
 if [ ! -d "$TEST_NETWORK" ]; then
     echo "[start] ERROR: fabric-samples not found at $TEST_NETWORK"
