@@ -19,6 +19,7 @@ MODEL_PATH = Path(os.environ.get("MODEL_PATH", "model/best.pt"))
 BRIDGE_URL = os.environ.get("BRIDGE_URL", "http://localhost:3000")
 BRIDGE_TIMEOUT = float(os.environ.get("BRIDGE_TIMEOUT", "30"))
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "10"))
+MIN_CONFIDENCE = float(os.environ.get("MIN_CONFIDENCE", "0.7"))
 
 
 class TraceFilter(logging.Filter):
@@ -112,7 +113,22 @@ def predict_harvest():
 
     log.info("classified fruit=%s conf=%.4f", fruit_type, confidence)
 
+    if confidence < MIN_CONFIDENCE:
+        log.info("rejected: low confidence %.4f < threshold %.4f", confidence, MIN_CONFIDENCE)
+        return jsonify(
+            status="rejected",
+            reason="low_confidence",
+            fruitType=fruit_type,
+            confidence=confidence,
+            threshold=MIN_CONFIDENCE,
+            imageHash=image_hash,
+            traceId=g.trace_id,
+        ), 200
+
+    record_id = f"harvest-{image_hash[:16]}"
+
     payload = {
+        "id": record_id,
         "latitude": lat,
         "longitude": lng,
         "fruitType": fruit_type,
@@ -133,11 +149,23 @@ def predict_harvest():
         return jsonify(error=f"bridge unreachable: {exc}", classified=payload, traceId=g.trace_id), 502
 
     if bridge_res.status_code >= 400:
-        log.error("bridge returned %d: %s", bridge_res.status_code, bridge_res.text)
+        bridge_text = bridge_res.text
+        if "already exists" in bridge_text:
+            log.info("rejected: duplicate id=%s hash=%s", record_id, image_hash[:12])
+            return jsonify(
+                status="duplicate",
+                reason="image_already_recorded",
+                id=record_id,
+                fruitType=fruit_type,
+                confidence=confidence,
+                imageHash=image_hash,
+                traceId=g.trace_id,
+            ), 200
+        log.error("bridge returned %d: %s", bridge_res.status_code, bridge_text)
         return jsonify(
             error="bridge rejected",
             bridge_status=bridge_res.status_code,
-            bridge_body=bridge_res.json() if bridge_res.headers.get("content-type", "").startswith("application/json") else bridge_res.text,
+            bridge_body=bridge_res.json() if bridge_res.headers.get("content-type", "").startswith("application/json") else bridge_text,
             classified=payload,
             traceId=g.trace_id,
         ), 502

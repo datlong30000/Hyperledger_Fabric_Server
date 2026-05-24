@@ -80,6 +80,20 @@ Body là form-data 3 trường:
 - ESP32-CAM không có GPS sẵn. Hoặc hardcode tọa độ điểm thu hoạch, hoặc gắn module GPS riêng (như NEO-6M).
 - Mỗi request là 1 record độc lập trên blockchain. Không cần đăng nhập/token gì.
 
+## Lọc false alarm
+
+Mặc định Flask **chặn 2 loại false alarm**:
+
+| Trường hợp | Phản hồi | HTTP code |
+|---|---|---|
+| AI confidence < 0.7 | `{"status":"rejected","reason":"low_confidence",...}` | 200 |
+| Ảnh trùng (cùng SHA-256 đã trên ledger) | `{"status":"duplicate","reason":"image_already_recorded",...}` | 200 |
+| OK, mới commit | `{"status":"ok","id":"harvest-...","fruitType":...}` | 201 |
+
+Client check `status` field để phân biệt. Đổi threshold qua env: `MIN_CONFIDENCE=0.85` trong `docker-compose.app.yml`.
+
+ID record được derive từ hash ảnh (`harvest-<hash[:16]>`), nên cùng 1 ảnh = cùng 1 ID → chaincode auto-reject duplicate.
+
 ## Xem tất cả records đã lưu
 
 ```bash
