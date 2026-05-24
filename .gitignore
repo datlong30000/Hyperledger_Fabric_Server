@@ -1,0 +1,45 @@
+# Dependencies
+node_modules/
+__pycache__/
+*.pyc
+venv/
+.venv/
+env/
+
+# Build outputs
+dist/
+build/
+*.egg-info/
+
+# Fabric samples (clone riêng, không commit theo repo này)
+fabric-samples/
+bin/
+config/
+
+# Model weights (27MB+, không commit binary)
+flask-server/model/*.pt
+flask-server/model/*.onnx
+
+# Off-chain image storage (runtime data)
+storage/*
+!storage/.gitkeep
+
+# Wallet/Credentials Fabric (msp, keystores) — KHÔNG commit
+node-bridge/wallet/
+node-bridge/identities/
+*.pem
+*.key
+
+# Logs
+*.log
+logs/
+
+# Environment
+.env
+.env.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
