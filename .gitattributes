@@ -1,0 +1,38 @@
+# Force LF line endings on all platforms for files that run on Unix/WSL.
+# Without this, Git for Windows can convert .sh to CRLF on clone, which
+# breaks bash with: env: $'bash\r': No such file or directory
+
+# Default: text files normalize to LF in repo, native endings in worktree
+* text=auto eol=lf
+
+# Unix shell scripts — must always be LF
+*.sh        text eol=lf
+*.bash      text eol=lf
+
+# Python — runs in Linux container, LF only
+*.py        text eol=lf
+
+# Node.js (also runs in Linux containers)
+*.js        text eol=lf
+*.json      text eol=lf
+
+# Docker
+Dockerfile  text eol=lf
+*.dockerfile text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf
+
+# Markdown — LF for cross-platform consistency
+*.md        text eol=lf
+
+# Windows scripts — always CRLF
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+*.ps1       text eol=crlf
+
+# Binary files — never touch
+*.pt        binary
+*.onnx      binary
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
