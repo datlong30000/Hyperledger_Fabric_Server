@@ -8,8 +8,9 @@ Gửi 1 ảnh trái cây + tọa độ GPS → hệ thống tự nhận diện (
 |---|---|
 | Windows 10/11 + WSL2 Ubuntu | `wsl --install` trong PowerShell admin |
 | Docker Desktop (bật "WSL Integration" cho Ubuntu) | docker.com |
-| File model `flask-server/model/best.pt` (~25MB) | xin từ project YOLO |
 | ~10GB ổ cứng trống | (Fabric + Torch image to) |
+
+Model `best.pt` đã có sẵn trong repo tại `flask-server/model/best.pt` — clone xong là dùng được.
 
 Lần đầu setup chi tiết từ con số 0: xem [docs/runbook.md](docs/runbook.md).
 
@@ -19,7 +20,7 @@ Lần đầu setup chi tiết từ con số 0: xem [docs/runbook.md](docs/runboo
 
 **WSL/Linux terminal:** `./start.sh`
 
-Script sẽ tự dựng blockchain, deploy chaincode, build và bật server. Lần đầu mất ~10 phút (vì kéo Torch ~500MB). Các lần sau dưới 30 giây.
+Script sẽ tự download Hyperledger Fabric (nếu chưa có), dựng blockchain, deploy chaincode, build và bật server. **Lần đầu mất ~15 phút** (kéo Fabric binaries + Docker images + Torch ~500MB). Các lần sau dưới 30 giây.
 
 Khi thấy banner `=== READY ===`, mở 3 link sau để xác nhận:
 
@@ -129,11 +130,10 @@ Hoang/
 
 ## Khi gặp lỗi
 
-3 lỗi phổ biến nhất:
+2 lỗi phổ biến nhất:
 
-1. **`start.sh` báo "fabric-samples not found"** → chạy `./install-fabric.sh -f 2.5.15 docker samples binary` trước.
-2. **`start.sh` báo "model file missing"** → copy file `best.pt` vào `flask-server/model/`.
-3. **Build lần đầu rất lâu** → bình thường (tải Torch ~500MB). Cứ chờ, lần sau nhanh.
+1. **Lần đầu build rất lâu** → bình thường (tải Fabric + Torch ~1GB). Cứ chờ, lần sau dưới 30s.
+2. **`start.sh` báo "model file missing"** → kiểm tra git clone đã hoàn tất chưa (file `flask-server/model/best.pt` phải tồn tại, ~25MB).
 
 Đầy đủ + sâu hơn: [docs/runbook.md](docs/runbook.md).
 

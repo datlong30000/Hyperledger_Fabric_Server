@@ -33,13 +33,27 @@ if ! command -v jq >/dev/null 2>&1; then
 fi
 
 if [ ! -d "$TEST_NETWORK" ]; then
-    echo "[start] ERROR: fabric-samples not found at $TEST_NETWORK"
-    echo "[start] run: ./install-fabric.sh -f 2.5.15 docker samples binary"
-    exit 1
+    echo "[start] fabric-samples not found — auto-installing Hyperledger Fabric 2.5.15"
+    echo "[start] (download binaries + clone samples + pull docker images, ~10 phút lần đầu)"
+    cd "$ROOT"
+    if [ ! -f "$ROOT/install-fabric.sh" ]; then
+        echo "[start] downloading install-fabric.sh from Hyperledger..."
+        if ! curl -fsSL https://raw.githubusercontent.com/hyperledger/fabric/main/scripts/install-fabric.sh \
+                -o "$ROOT/install-fabric.sh"; then
+            echo "[start] ERROR: failed to download install-fabric.sh. Check network."
+            exit 1
+        fi
+        chmod +x "$ROOT/install-fabric.sh"
+    fi
+    "$ROOT/install-fabric.sh" -f 2.5.15 docker samples binary
+    # install-fabric không kéo nodeenv image — pull thêm
+    docker pull hyperledger/fabric-nodeenv:2.5
+    cd "$TEST_NETWORK"
 fi
 
 if [ ! -f "$ROOT/flask-server/model/best.pt" ]; then
     echo "[start] ERROR: model file missing at flask-server/model/best.pt"
+    echo "[start] (best.pt nên đi kèm repo — kiểm tra lại git clone hoàn tất chưa)"
     exit 1
 fi
 

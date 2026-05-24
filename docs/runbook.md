@@ -11,9 +11,9 @@ Setup lần đầu từ máy trống + xử lý lỗi thường gặp. Dùng son
 
 Không cần cài Node/Python/jq trên host — mọi service đều chạy trong container, `start.sh` tự cài `jq` nếu thiếu.
 
-## Setup lần đầu (4 bước)
+## Setup lần đầu (2 bước)
 
-### Bước 1 — Bật WSL2 và cài Ubuntu
+### Bước 1 — Bật WSL2 và cài Docker Desktop
 
 Trong PowerShell admin:
 
@@ -23,9 +23,7 @@ wsl --install -d Ubuntu
 
 Restart máy, mở Ubuntu lần đầu để tạo username/password.
 
-### Bước 2 — Cài Docker Desktop
-
-Tải tại docker.com → cài → mở **Settings → Resources → WSL Integration** → bật cho Ubuntu distro.
+Tải Docker Desktop tại docker.com → cài → mở **Settings → Resources → WSL Integration** → bật cho Ubuntu distro.
 
 Verify (trong WSL Ubuntu):
 
@@ -33,49 +31,49 @@ Verify (trong WSL Ubuntu):
 docker ps     # không lỗi, không cần sudo
 ```
 
-### Bước 3 — Clone repo + tải Fabric
+### Bước 2 — Clone repo + chạy
 
 ```bash
 git clone https://github.com/datlong30000/Hyperledger_Fabric_Server.git Hoang
 cd Hoang
-./install-fabric.sh -f 2.5.15 docker samples binary
+./start.sh
 ```
 
-`install-fabric.sh` tải Hyperledger Fabric 2.5.15 binaries + Docker images + `fabric-samples/`. Mất ~5 phút tùy mạng.
+Hoặc double-click `start.bat` trên Windows.
 
-Nếu `install-fabric.sh` chưa có trong repo (lỗi gitignore):
+Lần đầu mất ~15 phút vì `start.sh` tự:
+- Download `install-fabric.sh` từ Hyperledger (nếu thiếu)
+- Tải Fabric 2.5.15 binaries + ~6 Docker images (~500MB)
+- Build image Flask (kéo Torch CPU ~500MB)
+- Dựng blockchain + deploy chaincode + bật service
+
+File model `best.pt` (~25MB) đã đi kèm repo, không phải copy thủ công.
+
+Các lần chạy sau dưới 30 giây.
+
+## Troubleshooting
+
+### `start.sh` báo "model file missing"
+
+File `flask-server/model/best.pt` không có. Kiểm tra git clone đã hoàn tất chưa:
+
+```bash
+ls -lh flask-server/model/best.pt    # phải ~25MB
+```
+
+Nếu thiếu (vd clone shallow): `cd Hoang && git lfs pull` hoặc clone lại đầy đủ.
+
+### `start.sh` lỗi download install-fabric.sh hoặc tải Fabric chậm
+
+Kiểm tra mạng. Có thể chạy thủ công:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/hyperledger/fabric/main/scripts/install-fabric.sh -o install-fabric.sh
 chmod +x install-fabric.sh
 ./install-fabric.sh -f 2.5.15 docker samples binary
+docker pull hyperledger/fabric-nodeenv:2.5
+./start.sh    # retry — start.sh idempotent
 ```
-
-Verify:
-
-```bash
-./fabric-samples/bin/peer version    # → 2.5.15
-docker images | grep hyperledger     # → ~5 image
-```
-
-### Bước 4 — Copy file model
-
-```bash
-cp /path/to/best.pt flask-server/model/best.pt
-ls -lh flask-server/model/best.pt    # → ~25MB
-```
-
-Xong setup. Từ giờ chỉ cần `./start.sh` (hoặc double-click `start.bat` trên Windows).
-
-## Troubleshooting
-
-### `start.sh` báo "fabric-samples not found"
-
-Quay lại Bước 3 — chạy `./install-fabric.sh -f 2.5.15 docker samples binary`.
-
-### `start.sh` báo "model file missing"
-
-Quay lại Bước 4 — copy `best.pt` vào `flask-server/model/`.
 
 ### `deployCC` lỗi `No such image: hyperledger/fabric-nodeenv:2.5`
 

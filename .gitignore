@@ -17,8 +17,7 @@ bin/
 config/
 install-fabric.sh
 
-# Model weights (27MB+, không commit binary)
-flask-server/model/*.pt
+# Model weights — best.pt được commit để sinh viên clone về có sẵn (~25MB)
 flask-server/model/*.onnx
 
 # Off-chain image storage (runtime data)
