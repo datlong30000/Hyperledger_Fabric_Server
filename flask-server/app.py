@@ -7,10 +7,11 @@ import io
 import logging
 import os
 import sys
+import uuid
 from pathlib import Path
 
 import requests
-from flask import Flask, jsonify, request
+from flask import Flask, g, jsonify, request
 from PIL import Image
 from ultralytics import YOLO
 
@@ -19,11 +20,26 @@ BRIDGE_URL = os.environ.get("BRIDGE_URL", "http://localhost:3000")
 BRIDGE_TIMEOUT = float(os.environ.get("BRIDGE_TIMEOUT", "30"))
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "10"))
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s [%(name)s] %(message)s",
-    stream=sys.stdout,
-)
+
+class TraceFilter(logging.Filter):
+    def filter(self, record):
+        if not hasattr(record, "trace"):
+            try:
+                from flask import has_request_context, g as _g
+                record.trace = _g.trace_id if has_request_context() and hasattr(_g, "trace_id") else "-"
+            except RuntimeError:
+                record.trace = "-"
+        return True
+
+
+_handler = logging.StreamHandler(sys.stdout)
+_handler.setFormatter(logging.Formatter(
+    "%(asctime)s %(levelname)s [%(name)s] trace=%(trace)s %(message)s"
+))
+_handler.addFilter(TraceFilter())
+_root = logging.getLogger()
+_root.handlers = [_handler]
+_root.setLevel(logging.INFO)
 log = logging.getLogger("flask-server")
 
 app = Flask(__name__)
@@ -48,6 +64,18 @@ def classify(image_bytes: bytes) -> tuple[str, float]:
     return label, round(top1_conf, 4)
 
 
+@app.before_request
+def assign_trace_id():
+    g.trace_id = request.headers.get("X-Trace-Id") or uuid.uuid4().hex
+
+
+@app.after_request
+def echo_trace_id(response):
+    if hasattr(g, "trace_id"):
+        response.headers["X-Trace-Id"] = g.trace_id
+    return response
+
+
 @app.get("/health")
 def health():
     return jsonify(status="ok", model=str(MODEL_PATH))
@@ -56,26 +84,33 @@ def health():
 @app.post("/api/predict-harvest")
 def predict_harvest():
     if "image" not in request.files:
-        return jsonify(error="missing file field 'image'"), 400
+        log.warning("rejected: missing file field 'image'")
+        return jsonify(error="missing file field 'image'", traceId=g.trace_id), 400
 
     file = request.files["image"]
     image_bytes = file.read()
     if not image_bytes:
-        return jsonify(error="empty image"), 400
+        log.warning("rejected: empty image")
+        return jsonify(error="empty image", traceId=g.trace_id), 400
 
     try:
         lat = float(request.form.get("lat", ""))
         lng = float(request.form.get("lng", ""))
     except ValueError:
-        return jsonify(error="lat/lng must be numbers"), 400
+        log.warning("rejected: lat/lng not numbers")
+        return jsonify(error="lat/lng must be numbers", traceId=g.trace_id), 400
 
     image_hash = hashlib.sha256(image_bytes).hexdigest()
+    log.info("received image=%s bytes=%d hash=%s gps=(%.4f,%.4f)",
+             file.filename, len(image_bytes), image_hash[:12], lat, lng)
 
     try:
         fruit_type, confidence = classify(image_bytes)
     except Exception as exc:
         log.exception("classify failed")
-        return jsonify(error=f"classify failed: {exc}"), 500
+        return jsonify(error=f"classify failed: {exc}", traceId=g.trace_id), 500
+
+    log.info("classified fruit=%s conf=%.4f", fruit_type, confidence)
 
     payload = {
         "latitude": lat,
@@ -84,16 +119,18 @@ def predict_harvest():
         "confidence": confidence,
         "imageHash": image_hash,
     }
+    headers = {"X-Trace-Id": g.trace_id}
 
     try:
         bridge_res = requests.post(
             f"{BRIDGE_URL}/tx/harvest",
             json=payload,
+            headers=headers,
             timeout=BRIDGE_TIMEOUT,
         )
     except requests.RequestException as exc:
         log.error("bridge unreachable: %s", exc)
-        return jsonify(error=f"bridge unreachable: {exc}", classified=payload), 502
+        return jsonify(error=f"bridge unreachable: {exc}", classified=payload, traceId=g.trace_id), 502
 
     if bridge_res.status_code >= 400:
         log.error("bridge returned %d: %s", bridge_res.status_code, bridge_res.text)
@@ -102,10 +139,12 @@ def predict_harvest():
             bridge_status=bridge_res.status_code,
             bridge_body=bridge_res.json() if bridge_res.headers.get("content-type", "").startswith("application/json") else bridge_res.text,
             classified=payload,
+            traceId=g.trace_id,
         ), 502
 
     bridge_data = bridge_res.json()
     record = bridge_data.get("record", {})
+    log.info("committed id=%s", record.get("ID"))
     return jsonify(
         status="ok",
         id=record.get("ID"),
@@ -115,16 +154,21 @@ def predict_harvest():
         lat=lat,
         lng=lng,
         timestamp=record.get("Timestamp"),
+        traceId=g.trace_id,
     ), 201
 
 
 @app.get("/api/records")
 def records():
     try:
-        bridge_res = requests.get(f"{BRIDGE_URL}/records", timeout=BRIDGE_TIMEOUT)
+        bridge_res = requests.get(
+            f"{BRIDGE_URL}/records",
+            headers={"X-Trace-Id": g.trace_id},
+            timeout=BRIDGE_TIMEOUT,
+        )
         return jsonify(bridge_res.json()), bridge_res.status_code
     except requests.RequestException as exc:
-        return jsonify(error=f"bridge unreachable: {exc}"), 502
+        return jsonify(error=f"bridge unreachable: {exc}", traceId=g.trace_id), 502
 
 
 if __name__ == "__main__":

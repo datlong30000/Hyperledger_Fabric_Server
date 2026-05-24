@@ -6,8 +6,21 @@ const fabric = require('./fabric-client');
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
 
+function log(level, trace, msg, extra) {
+    const ts = new Date().toISOString();
+    const tail = extra ? ` ${JSON.stringify(extra)}` : '';
+    const line = `${ts} ${level} [bridge] trace=${trace || '-'} ${msg}${tail}`;
+    if (level === 'ERROR') console.error(line);
+    else console.log(line);
+}
+
 const app = express();
 app.use(express.json({ limit: '1mb' }));
+
+app.use((req, _res, next) => {
+    req.traceId = req.header('X-Trace-Id') || crypto.randomUUID();
+    next();
+});
 
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
 
@@ -16,8 +29,10 @@ app.post('/tx/harvest', async (req, res) => {
 
     if (body.latitude === undefined || body.longitude === undefined ||
         !body.fruitType || body.confidence === undefined || !body.imageHash) {
+        log('WARN', req.traceId, 'rejected: missing fields');
         return res.status(400).json({
             error: 'missing fields: latitude, longitude, fruitType, confidence, imageHash required',
+            traceId: req.traceId,
         });
     }
 
@@ -31,32 +46,40 @@ app.post('/tx/harvest', async (req, res) => {
         ImageHash: String(body.imageHash),
     };
 
+    log('INFO', req.traceId, 'submit', { id: record.ID, fruit: record.FruitType });
+
     try {
         const saved = await fabric.submitCreateHarvest(record);
-        res.status(201).json({ status: 'committed', record: saved });
+        log('INFO', req.traceId, 'committed', { id: saved.ID });
+        res.status(201).json({ status: 'committed', record: saved, traceId: req.traceId });
     } catch (err) {
-        console.error('[bridge] submit error:', err.message);
-        res.status(500).json({ error: err.message, details: err.details || null });
+        log('ERROR', req.traceId, 'submit failed', { error: err.message });
+        res.status(500).json({ error: err.message, details: err.details || null, traceId: req.traceId });
     }
 });
 
-app.get('/records', async (_req, res) => {
+app.get('/records', async (req, res) => {
     try {
         const records = await fabric.evaluateGetAll();
+        log('INFO', req.traceId, 'query', { count: records.length });
         res.json({ count: records.length, records });
     } catch (err) {
-        console.error('[bridge] query error:', err.message);
-        res.status(500).json({ error: err.message });
+        log('ERROR', req.traceId, 'query failed', { error: err.message });
+        res.status(500).json({ error: err.message, traceId: req.traceId });
     }
 });
 
 const server = app.listen(PORT, () => {
-    console.log(`[bridge] listening on :${PORT}`);
-    console.log(`[bridge] peer=${fabric.config.peerEndpoint} channel=${fabric.config.channel} cc=${fabric.config.chaincode}`);
+    log('INFO', '-', `listening on :${PORT}`);
+    log('INFO', '-', 'config', {
+        peer: fabric.config.peerEndpoint,
+        channel: fabric.config.channel,
+        chaincode: fabric.config.chaincode,
+    });
 });
 
 function shutdown(signal) {
-    console.log(`[bridge] received ${signal}, shutting down`);
+    log('INFO', '-', `received ${signal}, shutting down`);
     server.close(() => {
         fabric.close();
         process.exit(0);

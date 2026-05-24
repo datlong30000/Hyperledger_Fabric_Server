@@ -6,6 +6,7 @@ import os
 import random
 import sys
 import time
+import uuid
 from pathlib import Path
 
 import requests
@@ -21,22 +22,24 @@ def discover_images(folder: Path) -> list[Path]:
     return sorted(p for p in folder.iterdir() if p.suffix.lower() in exts and p.is_file())
 
 
-def post_one(url: str, image_path: Path, timeout: float) -> tuple[bool, str]:
+def post_one(url: str, image_path: Path, timeout: float) -> tuple[bool, str, str]:
+    trace_id = uuid.uuid4().hex
     lat = HCMC_LAT + random.uniform(-0.05, 0.05)
     lng = HCMC_LNG + random.uniform(-0.05, 0.05)
     with image_path.open("rb") as f:
         files = {"image": (image_path.name, f, "application/octet-stream")}
         data = {"lat": f"{lat:.6f}", "lng": f"{lng:.6f}"}
+        headers = {"X-Trace-Id": trace_id}
         try:
-            res = requests.post(url, files=files, data=data, timeout=timeout)
+            res = requests.post(url, files=files, data=data, headers=headers, timeout=timeout)
         except requests.RequestException as exc:
-            return False, f"request failed: {exc}"
+            return False, trace_id, f"request failed: {exc}"
 
     if res.status_code >= 400:
-        return False, f"HTTP {res.status_code}: {res.text[:200]}"
+        return False, trace_id, f"HTTP {res.status_code}: {res.text[:200]}"
 
     body = res.json()
-    return True, f"id={body.get('id')} fruit={body.get('fruitType')} conf={body.get('confidence')}"
+    return True, trace_id, f"id={body.get('id')} fruit={body.get('fruitType')} conf={body.get('confidence')}"
 
 
 def main():
@@ -65,14 +68,14 @@ def main():
     try:
         while args.count == 0 or sent < args.count:
             image = random.choice(images)
-            ok, msg = post_one(args.url, image, args.timeout)
+            ok, trace, msg = post_one(args.url, image, args.timeout)
             sent += 1
             if ok:
                 success += 1
-                print(f"  [{sent}] OK   {image.name}  {msg}")
+                print(f"  [{sent}] OK   trace={trace[:8]} {image.name}  {msg}")
             else:
                 failed += 1
-                print(f"  [{sent}] FAIL {image.name}  {msg}", file=sys.stderr)
+                print(f"  [{sent}] FAIL trace={trace[:8]} {image.name}  {msg}", file=sys.stderr)
             if args.count == 0 or sent < args.count:
                 time.sleep(args.interval)
     except KeyboardInterrupt:

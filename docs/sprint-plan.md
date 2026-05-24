@@ -77,6 +77,12 @@
 
 **Milestone M3 (nghiệm thu cuối):** Người ngoài clone repo → đọc README → 1 lệnh `./start.sh` → chu trình hoàn chỉnh trong 15 phút.
 
+**Trạng thái thực tế:**
+- M0 ✅ (Fauxton UI accessible)
+- M1 ✅ (mock_invoker --count 20 → 20/20 VALID, CouchDB có records)
+- M2 ✅ (curl ảnh → ImageHash khớp sha256sum, record on ledger qua bridge)
+- M3 ✅ (start.sh cold-start 1 lệnh, UAT 60/60 success ~7 phút, docs đầy đủ; video chưa quay - script có sẵn ở [video-script.md](video-script.md))
+
 ## Tóm tắt milestone (cho thuyết minh)
 
 | ID | Sprint | Hình thức chứng minh |

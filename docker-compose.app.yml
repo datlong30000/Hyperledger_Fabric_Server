@@ -1,0 +1,75 @@
+name: hoang-fabric-app
+
+networks:
+  fabric_test:
+    external: true
+
+services:
+  node-bridge:
+    image: hoang/node-bridge:dev
+    build:
+      context: ./node-bridge
+    container_name: node-bridge
+    restart: unless-stopped
+    networks:
+      - fabric_test
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./fabric-samples/test-network/organizations/peerOrganizations/org1.example.com:/fabric/org1:ro
+    environment:
+      FABRIC_MSP_ID: Org1MSP
+      FABRIC_CRYPTO_ROOT: /fabric/org1
+      FABRIC_PEER_ENDPOINT: peer0.org1.example.com:7051
+      FABRIC_PEER_HOST_ALIAS: peer0.org1.example.com
+      FABRIC_CHANNEL: mychannel
+      FABRIC_CHAINCODE: harvest-cc
+      FABRIC_CONTRACT: HarvestContract
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  flask-server:
+    image: hoang/flask-server:dev
+    build:
+      context: ./flask-server
+    container_name: flask-server
+    restart: unless-stopped
+    networks:
+      - fabric_test
+    ports:
+      - "5000:5000"
+    environment:
+      BRIDGE_URL: http://node-bridge:3000
+      BRIDGE_TIMEOUT: "30"
+      MODEL_PATH: /app/model/best.pt
+      MAX_UPLOAD_MB: "10"
+    depends_on:
+      node-bridge:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c 'import urllib.request,sys; urllib.request.urlopen(\"http://localhost:5000/health\",timeout=3); sys.exit(0)'"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  mock-client:
+    image: hoang/mock-client:dev
+    build:
+      context: ./mock-client
+    container_name: mock-client
+    profiles: ["mock"]
+    networks:
+      - fabric_test
+    environment:
+      FLASK_URL: http://flask-server:5000/api/predict-harvest
+      IMAGES_DIR: /app/sample-images
+      INTERVAL: "5"
+      COUNT: "0"
+    depends_on:
+      flask-server:
+        condition: service_healthy
