@@ -5,7 +5,7 @@ REM Yeu cau: WSL2 + Ubuntu (hoac distro Linux khac) da setup san.
 echo [start.bat] Calling WSL to run ./start.sh ...
 echo.
 
-wsl --cd "%~dp0" -- bash -c "./start.sh"
+wsl --cd "%~dp0" -- bash -lc "./start.sh"
 
 set EXITCODE=%ERRORLEVEL%
 echo.

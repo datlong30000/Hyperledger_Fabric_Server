@@ -5,7 +5,7 @@ REM Pass-through args: stop.bat --purge -> stop.sh --purge
 echo [stop.bat] Calling WSL to run ./stop.sh %* ...
 echo.
 
-wsl --cd "%~dp0" -- bash -c "./stop.sh %*"
+wsl --cd "%~dp0" -- bash -lc "./stop.sh %*"
 
 set EXITCODE=%ERRORLEVEL%
 echo.
