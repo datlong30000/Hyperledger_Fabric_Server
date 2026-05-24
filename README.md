@@ -47,6 +47,8 @@ Chi tiết môi trường + cách dựng từ con số 0 xem [docs/runbook.md](d
 
 Script tự làm: dựng test-network + CouchDB → deploy chaincode `harvest-cc` → build + up `node-bridge` + `flask-server`. Idempotent — chạy lại không bị lỗi nếu đã up sẵn.
 
+**Windows users:** double-click `start.bat` từ Windows Explorer (wrapper gọi `wsl ./start.sh`). Tương tự `stop.bat` cho cleanup. Yêu cầu WSL2 + Ubuntu đã setup.
+
 Sau khi xong:
 
 | Service        | URL                                |
@@ -101,8 +103,8 @@ Hoang/
 │   ├── runbook.md              Setup từ 0, troubleshooting, recovery
 │   └── video-script.md         Storyboard cho demo 3 phút
 ├── docker-compose.app.yml      Master compose (3 services)
-├── start.sh                    1-lệnh orchestration
-└── stop.sh                     Cleanup
+├── start.sh / start.bat        1-lệnh orchestration (.bat = wrapper Windows)
+└── stop.sh  / stop.bat         Cleanup (.bat pass-through `--purge`)
 ```
 
 ## Trace ID
