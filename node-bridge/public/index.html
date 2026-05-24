@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hoang Harvest — Farm to Ledger</title>
+  <meta name="description" content="Every harvest verified by AI, fingerprinted with SHA-256, and sealed on Hyperledger Fabric." />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='17' r='11' fill='%232D4A21'/%3E%3Cpath d='M15 5 L17 5 L17 8 L15 8 Z' fill='%23C39536'/%3E%3C/svg%3E" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Serif+Display&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="site-header">
+    <div class="container header-inner">
+      <a href="#top" class="brand" aria-label="Hoang Harvest home">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-name">Hoang Harvest</span>
+      </a>
+      <nav class="nav-links" aria-label="Primary">
+        <a href="#records">Records</a>
+        <a href="#map">Field Map</a>
+        <a href="#verify">Verify</a>
+      </nav>
+      <div class="header-actions">
+        <button id="resetBtn" class="btn-text" type="button" aria-label="Reset demo data">
+          Reset demo
+        </button>
+        <button id="refreshBtn" class="btn btn-ghost" type="button" aria-label="Refresh records">
+          <span class="refresh-icon" aria-hidden="true"></span>
+          <span>Refresh</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <main id="top">
+    <section class="hero container">
+      <p class="eyebrow">Verified Harvest Ledger</p>
+      <h1>Trusted from farm to ledger.</h1>
+      <p class="lede">
+        Every harvest is identified by AI, fingerprinted with SHA-256,
+        and sealed on a Hyperledger Fabric blockchain — making each record
+        permanent, traceable and tamper-evident.
+      </p>
+
+      <div class="stats-grid">
+        <article class="stat-card" data-stat="total">
+          <span class="stat-label">Total Records</span>
+          <span class="stat-value" data-value>—</span>
+          <span class="stat-meta">on ledger</span>
+        </article>
+        <article class="stat-card" data-stat="fresh">
+          <span class="stat-label">Fresh</span>
+          <span class="stat-value" data-value>—</span>
+          <span class="stat-meta">market ready</span>
+        </article>
+        <article class="stat-card" data-stat="unripe">
+          <span class="stat-label">Unripe</span>
+          <span class="stat-value" data-value>—</span>
+          <span class="stat-meta">pending maturity</span>
+        </article>
+        <article class="stat-card" data-stat="rotten">
+          <span class="stat-label">Rotten</span>
+          <span class="stat-value" data-value>—</span>
+          <span class="stat-meta">flagged for removal</span>
+        </article>
+      </div>
+    </section>
+
+    <section class="container map-section" id="map">
+      <div class="section-head">
+        <h2>Field Activity</h2>
+        <p class="section-sub">
+          Every captured GPS coordinate, mapped to its harvest record.
+          Tap a marker to see the linked ledger entry.
+        </p>
+      </div>
+      <div id="leaflet-map" class="leaflet-frame" aria-label="Map of harvest locations"></div>
+    </section>
+
+    <section class="container" id="records">
+      <div class="section-head section-head--row">
+        <div>
+          <h2>Recent Harvests</h2>
+          <p class="section-sub">Filter by quality. Each record is immutable once committed.</p>
+        </div>
+        <div class="filter-chips" id="filterChips" role="tablist" aria-label="Filter by category">
+          <button class="chip is-active" data-filter="all" role="tab" aria-selected="true">All</button>
+          <button class="chip" data-filter="fresh" role="tab" aria-selected="false">Fresh</button>
+          <button class="chip" data-filter="unripe" role="tab" aria-selected="false">Unripe</button>
+          <button class="chip" data-filter="rotten" role="tab" aria-selected="false">Rotten</button>
+        </div>
+      </div>
+
+      <div id="recordsList" class="records-list" aria-live="polite"></div>
+      <p id="emptyState" class="empty-state" hidden></p>
+    </section>
+
+    <section class="container verify" id="verify">
+      <div class="verify-card">
+        <p class="eyebrow">Independent Verification</p>
+        <h2>Verify a harvest yourself.</h2>
+        <p>Anyone holding the original image can confirm the record wasn't altered:</p>
+        <pre class="code-block"><code>sha256sum your_image.png</code></pre>
+        <p>
+          Match the output against the <strong>image hash</strong> shown on each record.
+          A match means the image is identical to the one classified and committed —
+          byte for byte.
+        </p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="container footer-inner">
+      <div>
+        <p><strong>Hoang Harvest</strong> · Hyperledger Fabric · channel <code>mychannel</code></p>
+        <p class="muted">Backend traceability prototype · Apache-2.0</p>
+      </div>
+      <p class="muted">Auto-refresh every 30 s</p>
+    </div>
+  </footer>
+
+  <div id="detailModal" class="modal" hidden>
+    <div class="modal-backdrop" data-close></div>
+    <article class="modal-card" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+      <header class="modal-head">
+        <div>
+          <p class="eyebrow" id="modalEyebrow">Harvest</p>
+          <h3 id="modalTitle">Detail</h3>
+        </div>
+        <button class="icon-btn" data-close aria-label="Close detail">×</button>
+      </header>
+      <div id="modalBody" class="modal-body"></div>
+    </article>
+  </div>
+
+  <div id="resetModal" class="modal" hidden>
+    <div class="modal-backdrop" data-close-reset></div>
+    <article class="modal-card modal-card--narrow" role="dialog" aria-modal="true" aria-labelledby="resetTitle">
+      <header class="modal-head">
+        <div>
+          <p class="eyebrow">Maintenance</p>
+          <h3 id="resetTitle">Reset demo</h3>
+        </div>
+        <button class="icon-btn" data-close-reset aria-label="Cancel">×</button>
+      </header>
+      <div class="modal-body reset-body">
+        <p class="reset-lede">
+          This wipes <strong>all ledger records and stored images</strong>,
+          then brings the network back up clean. Takes about 30 seconds.
+        </p>
+        <p class="reset-note">Run this in your project terminal:</p>
+        <div class="reset-cmd">
+          <code id="resetCmd">./stop.sh --purge &amp;&amp; ./start.sh</code>
+          <button class="copy-btn" id="resetCopyBtn" type="button" data-copy="./stop.sh --purge && ./start.sh">Copy</button>
+        </div>
+        <p class="reset-status" id="resetStatus" hidden>
+          <span class="reset-dot"></span>
+          <span id="resetStatusText">Waiting for network to come back…</span>
+        </p>
+        <p class="reset-hint">
+          Dashboard will auto-detect when the demo is ready again.
+        </p>
+      </div>
+    </article>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  <script src="app.js"></script>
+</body>
+</html>

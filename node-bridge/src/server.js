@@ -1,10 +1,19 @@
 'use strict';
 
 const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
 const express = require('express');
 const fabric = require('./fabric-client');
 
 const PORT = parseInt(process.env.PORT || '3000', 10);
+const PUBLIC_DIR = path.join(__dirname, '..', 'public');
+const IMAGE_STORE = process.env.IMAGE_STORE || '/data/images';
+const IMAGE_EXTS = ['jpg', 'jpeg', 'png', 'webp', 'gif'];
+const IMAGE_CT = {
+    jpg: 'image/jpeg', jpeg: 'image/jpeg',
+    png: 'image/png', webp: 'image/webp', gif: 'image/gif',
+};
 
 function log(level, trace, msg, extra) {
     const ts = new Date().toISOString();
@@ -22,7 +31,25 @@ app.use((req, _res, next) => {
     next();
 });
 
+app.use(express.static(PUBLIC_DIR, { extensions: ['html'] }));
+
 app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+
+app.get('/images/:hash', (req, res) => {
+    const hash = String(req.params.hash || '').toLowerCase();
+    if (!/^[a-f0-9]{64}$/.test(hash)) {
+        return res.status(400).json({ error: 'invalid hash format' });
+    }
+    for (const ext of IMAGE_EXTS) {
+        const file = path.join(IMAGE_STORE, `${hash}.${ext}`);
+        if (fs.existsSync(file)) {
+            res.set('Cache-Control', 'public, max-age=31536000, immutable');
+            res.set('Content-Type', IMAGE_CT[ext] || 'application/octet-stream');
+            return res.sendFile(file);
+        }
+    }
+    res.status(404).json({ error: 'image not found', hash });
+});
 
 app.post('/tx/harvest', async (req, res) => {
     const body = req.body || {};

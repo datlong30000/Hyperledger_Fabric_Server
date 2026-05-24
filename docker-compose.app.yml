@@ -4,6 +4,9 @@ networks:
   fabric_test:
     external: true
 
+volumes:
+  images:
+
 services:
   node-bridge:
     image: hoang/node-bridge:dev
@@ -17,6 +20,7 @@ services:
       - "3000:3000"
     volumes:
       - ./fabric-samples/test-network/organizations/peerOrganizations/org1.example.com:/fabric/org1:ro
+      - images:/data/images:ro
     environment:
       FABRIC_MSP_ID: Org1MSP
       FABRIC_CRYPTO_ROOT: /fabric/org1
@@ -25,6 +29,7 @@ services:
       FABRIC_CHANNEL: mychannel
       FABRIC_CHAINCODE: harvest-cc
       FABRIC_CONTRACT: HarvestContract
+      IMAGE_STORE: /data/images
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
       interval: 5s
@@ -42,11 +47,14 @@ services:
       - fabric_test
     ports:
       - "5000:5000"
+    volumes:
+      - images:/data/images
     environment:
       BRIDGE_URL: http://node-bridge:3000
       BRIDGE_TIMEOUT: "30"
       MODEL_PATH: /app/model/best.pt
       MAX_UPLOAD_MB: "10"
+      IMAGE_STORE: /data/images
     depends_on:
       node-bridge:
         condition: service_healthy

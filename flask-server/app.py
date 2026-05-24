@@ -20,6 +20,21 @@ BRIDGE_URL = os.environ.get("BRIDGE_URL", "http://localhost:3000")
 BRIDGE_TIMEOUT = float(os.environ.get("BRIDGE_TIMEOUT", "30"))
 MAX_UPLOAD_MB = int(os.environ.get("MAX_UPLOAD_MB", "10"))
 MIN_CONFIDENCE = float(os.environ.get("MIN_CONFIDENCE", "0.7"))
+IMAGE_STORE = Path(os.environ.get("IMAGE_STORE", "/data/images"))
+
+
+def _ext_from_bytes(data: bytes, fallback: str = "") -> str:
+    if data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "png"
+    if data[:3] == b"\xff\xd8\xff":
+        return "jpg"
+    if data[:6] in (b"GIF87a", b"GIF89a"):
+        return "gif"
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "webp"
+    if "." in fallback:
+        return fallback.rsplit(".", 1)[-1].lower()
+    return "bin"
 
 
 class TraceFilter(logging.Filter):
@@ -53,6 +68,12 @@ if not MODEL_PATH.exists():
 log.info("loading YOLO model from %s", MODEL_PATH.resolve())
 model = YOLO(str(MODEL_PATH))
 log.info("model loaded: task=%s names=%s", model.task, getattr(model, "names", "?"))
+
+try:
+    IMAGE_STORE.mkdir(parents=True, exist_ok=True)
+    log.info("image store ready at %s", IMAGE_STORE)
+except Exception as exc:
+    log.warning("image store not writable (%s): %s", IMAGE_STORE, exc)
 
 
 def classify(image_bytes: bytes) -> tuple[str, float]:
@@ -173,6 +194,16 @@ def predict_harvest():
     bridge_data = bridge_res.json()
     record = bridge_data.get("record", {})
     log.info("committed id=%s", record.get("ID"))
+
+    try:
+        ext = _ext_from_bytes(image_bytes, file.filename or "")
+        target = IMAGE_STORE / f"{image_hash}.{ext}"
+        if not target.exists():
+            target.write_bytes(image_bytes)
+            log.info("saved image to %s (%d bytes)", target.name, len(image_bytes))
+    except Exception as exc:
+        log.warning("image save failed (non-fatal): %s", exc)
+
     return jsonify(
         status="ok",
         id=record.get("ID"),
