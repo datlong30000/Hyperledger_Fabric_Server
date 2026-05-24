@@ -1,140 +1,147 @@
-# Hoang — Fabric Backend Core
+# Hoang — Backend truy xuất nguồn gốc trái cây
 
-Backend cho ứng dụng nhận diện độ tươi trái cây. Mỗi tấm ảnh được classify bằng YOLO26-cls, hash SHA-256, rồi lưu chứng thực (label + confidence + GPS + hash) lên Hyperledger Fabric ledger qua một bridge Node.js.
+Gửi 1 ảnh trái cây + tọa độ GPS → hệ thống tự nhận diện (táo/chuối/cam × tươi/hỏng/chưa chín) → lưu kết quả lên blockchain để sau này không ai sửa được.
 
-## Kiến trúc
+## Bạn cần gì
 
-```
-┌───────────────┐   POST multipart    ┌────────────────────┐
-│ Mock client   │ ──── (ảnh + GPS) ──▶│ Flask server       │
-│ (Python)      │                     │ + YOLO26-cls       │
-└───────────────┘                     │ + SHA-256          │
-                                      └─────────┬──────────┘
-                                                │ POST /tx/harvest
-                                                │ (label, conf, hash, GPS)
-                                                ▼
-                                      ┌────────────────────┐
-                                      │ Node bridge        │
-                                      │ Express +          │
-                                      │ fabric-gateway     │
-                                      └─────────┬──────────┘
-                                                │ gRPC + mTLS
-                                                ▼
-                                      ┌────────────────────┐
-                                      │ Hyperledger Fabric │
-                                      │ 2.5.15 (Org1+Org2) │
-                                      │ + CouchDB state    │
-                                      └────────────────────┘
-```
+| Thứ | Cài ở đâu |
+|---|---|
+| Windows 10/11 + WSL2 Ubuntu | `wsl --install` trong PowerShell admin |
+| Docker Desktop (bật "WSL Integration" cho Ubuntu) | docker.com |
+| File model `flask-server/model/best.pt` (~25MB) | xin từ project YOLO |
+| ~10GB ổ cứng trống | (Fabric + Torch image to) |
 
-3 service đều dockerized, dùng chung Docker network external `fabric_test` (do `test-network` của Hyperledger tạo).
+Lần đầu setup chi tiết từ con số 0: xem [docs/runbook.md](docs/runbook.md).
 
-## Yêu cầu môi trường
+## Chạy thử (1 lệnh)
 
-- WSL2 Ubuntu (hoặc Linux), Docker Desktop với WSL Integration bật
-- Node.js 20 LTS (qua nvm)
-- `jq`, `curl`
-- Đã chạy `./install-fabric.sh -f 2.5.15 docker samples binary` (tạo `fabric-samples/`)
-- File model `flask-server/model/best.pt` (~25MB, copy từ project YOLO sang)
+**Windows:** double-click `start.bat` từ Windows Explorer.
 
-Chi tiết môi trường + cách dựng từ con số 0 xem [docs/runbook.md](docs/runbook.md).
+**WSL/Linux terminal:** `./start.sh`
 
-## Khởi động nhanh (1 lệnh)
+Script sẽ tự dựng blockchain, deploy chaincode, build và bật server. Lần đầu mất ~10 phút (vì kéo Torch ~500MB). Các lần sau dưới 30 giây.
+
+Khi thấy banner `=== READY ===`, mở 3 link sau để xác nhận:
+
+| | URL | Dùng để |
+|---|---|---|
+| Trạng thái AI server | http://localhost:5000/health | Phải trả `{"status":"ok"}` |
+| Trạng thái blockchain bridge | http://localhost:3000/health | Phải trả `{"status":"ok"}` |
+| Xem dữ liệu đã lưu | http://localhost:5984/_utils | Login `admin` / `adminpw`, chọn database `mychannel_harvest-cc` |
+
+## Gửi 1 ảnh và xem kết quả
 
 ```bash
-./start.sh
-```
-
-Script tự làm: dựng test-network + CouchDB → deploy chaincode `harvest-cc` → build + up `node-bridge` + `flask-server`. Idempotent — chạy lại không bị lỗi nếu đã up sẵn.
-
-**Windows users:** double-click `start.bat` từ Windows Explorer (wrapper gọi `wsl ./start.sh`). Tương tự `stop.bat` cho cleanup. Yêu cầu WSL2 + Ubuntu đã setup.
-
-Sau khi xong:
-
-| Service        | URL                                |
-| -------------- | ---------------------------------- |
-| Flask AI       | http://localhost:5000              |
-| Node bridge    | http://localhost:3000              |
-| CouchDB Fauxton| http://localhost:5984/_utils       |
-
-Credentials Fauxton: `admin` / `adminpw`. Database ledger: `mychannel_harvest-cc`.
-
-## Test thủ công
-
-```bash
-# 1 ảnh đơn lẻ → xem record committed
 curl -F image=@mock-client/sample-images/fresh_apple.png \
      -F lat=10.762 -F lng=106.660 \
-     http://localhost:5000/api/predict-harvest | jq
+     http://localhost:5000/api/predict-harvest
+```
 
-# Query tất cả records
-curl -s http://localhost:3000/records | jq '.count, .records[0]'
+Trả về JSON kiểu:
 
-# Mock client (Docker): gửi liên tục 5s/lần, vô hạn
+```json
+{
+  "status": "ok",
+  "id": "harvest-9a73762617dd",
+  "fruitType": "freshapples",
+  "confidence": 1.0,
+  "imageHash": "428d413b011d33...",
+  "traceId": "..."
+}
+```
+
+Trong đó:
+- `fruitType` — kết quả AI phân loại (1 trong 9 lớp: freshapples / freshbanana / freshoranges / rottenapples / rottenbanana / rottenoranges / unripeapples / unripebanana / unripeoranges)
+- `confidence` — độ tin cậy 0.0-1.0
+- `imageHash` — "dấu vân tay" SHA-256 của ảnh. Bất kỳ ai cũng tự verify được bằng `sha256sum your_image.png` rồi so với hash này. Nếu khớp → ảnh chưa bị chỉnh sửa.
+- `id` — mã record trên blockchain
+
+## Gửi data từ thiết bị khác (ESP32, app điện thoại, ...)
+
+Chỉ có **1 địa chỉ duy nhất** cần biết:
+
+```
+POST http://<IP-máy-server>:5000/api/predict-harvest
+```
+
+Body là form-data 3 trường:
+
+| Trường | Kiểu | Mô tả |
+|---|---|---|
+| `image` | file | Ảnh JPEG hoặc PNG |
+| `lat`   | text | Vĩ độ (số thực, ví dụ `10.762`) |
+| `lng`   | text | Kinh độ (số thực, ví dụ `106.660`) |
+
+**Vài lưu ý:**
+
+- Nếu thiết bị (ESP32, điện thoại) ở cùng Wi-Fi với máy server, đổi `localhost` thành IP máy server. Lấy IP bằng cách: trong PowerShell chạy `ipconfig`, lấy "IPv4 Address" của adapter Wi-Fi (ví dụ `192.168.1.50`).
+- Tường lửa Windows có thể chặn port 5000 — vào Windows Defender Firewall → cho phép Docker Desktop.
+- ESP32-CAM không có GPS sẵn. Hoặc hardcode tọa độ điểm thu hoạch, hoặc gắn module GPS riêng (như NEO-6M).
+- Mỗi request là 1 record độc lập trên blockchain. Không cần đăng nhập/token gì.
+
+## Xem tất cả records đã lưu
+
+```bash
+curl http://localhost:3000/records
+```
+
+Hoặc mở Fauxton ở http://localhost:5984/_utils → chọn database `mychannel_harvest-cc` → nhìn từng document.
+
+## Dùng mock client để spam thử
+
+Để test khi không có thiết bị thật, mock-client gửi liên tục ảnh ngẫu nhiên:
+
+```bash
+# Vô hạn, 5 giây/lần
 docker compose -f docker-compose.app.yml --profile mock up mock-client
 
-# Mock client với giới hạn 20 request
+# Có giới hạn: 20 ảnh, 2 giây/lần rồi dừng
 docker compose -f docker-compose.app.yml run --rm \
   -e COUNT=20 -e INTERVAL=2 mock-client
 ```
 
 ## Tắt
 
-```bash
-./stop.sh           # giữ ledger data
-./stop.sh --purge   # xóa luôn volume CouchDB
-```
+**Windows:** double-click `stop.bat`.
+
+**WSL/Linux:** `./stop.sh`
+
+Thêm `--purge` (hoặc `stop.bat --purge` chạy từ cmd) để xóa luôn dữ liệu blockchain → reset sạch.
 
 ## Cấu trúc thư mục
 
 ```
 Hoang/
-├── chaincode/                  Chaincode Fabric (Node.js, 2 hàm CreateHarvest + GetAll)
-├── node-bridge/                Express + fabric-gateway (REST ↔ gRPC bridge)
-├── flask-server/               Flask + YOLO + SHA-256
-│   └── model/best.pt           (gitignored — tải riêng từ project YOLO)
-├── mock-client/                Mock CLI invoker (Sprint 1) + HTTP client (Sprint 2)
-│   └── sample-images/          9 ảnh test (1 / class)
-├── fabric-samples/             (gitignored — clone qua install-fabric.sh)
-├── storage/                    Off-chain image storage (runtime, gitignored)
+├── flask-server/         AI server (Flask + YOLO)
+│   └── model/best.pt     File model (gitignored, xin riêng)
+├── node-bridge/          Cầu nối từ Flask sang blockchain (Node.js)
+├── chaincode/            Code chạy bên trong blockchain (Node.js)
+├── mock-client/          Trình giả lập client
+│   └── sample-images/    9 ảnh mẫu (1 ảnh/lớp)
+├── fabric-samples/       Hyperledger Fabric (gitignored, cài qua install-fabric.sh)
 ├── docs/
-│   ├── sprint-plan.md          Plan 4 sprint + DoD + risk register
-│   ├── architecture.md         Sequence diagram + data flow + decisions
-│   ├── runbook.md              Setup từ 0, troubleshooting, recovery
-│   └── video-script.md         Storyboard cho demo 3 phút
-├── docker-compose.app.yml      Master compose (3 services)
-├── start.sh / start.bat        1-lệnh orchestration (.bat = wrapper Windows)
-└── stop.sh  / stop.bat         Cleanup (.bat pass-through `--purge`)
+│   ├── architecture.md   Sơ đồ + giải thích cách hoạt động
+│   └── runbook.md        Setup từ 0 + xử lý lỗi
+├── docker-compose.app.yml
+├── start.sh / start.bat  1 lệnh khởi động
+└── stop.sh  / stop.bat   1 lệnh tắt
 ```
 
-## Trace ID
+## Khi gặp lỗi
 
-Mỗi request được gắn `X-Trace-Id` (UUID v4) ở Flask, propagate qua bridge, log đầy đủ ở cả 3 layer để correlate.
+3 lỗi phổ biến nhất:
 
-```bash
-# Curl với trace cố định
-curl -H "X-Trace-Id: my-test-123" -F image=@... ...
+1. **`start.sh` báo "fabric-samples not found"** → chạy `./install-fabric.sh -f 2.5.15 docker samples binary` trước.
+2. **`start.sh` báo "model file missing"** → copy file `best.pt` vào `flask-server/model/`.
+3. **Build lần đầu rất lâu** → bình thường (tải Torch ~500MB). Cứ chờ, lần sau nhanh.
 
-# Grep log
-docker logs flask-server | grep "trace=my-test-123"
-docker logs node-bridge  | grep "trace=my-test-123"
-```
+Đầy đủ + sâu hơn: [docs/runbook.md](docs/runbook.md).
 
-## Roadmap
+## Muốn hiểu cách nó hoạt động?
 
-| Sprint | Trạng thái | Nội dung                                                     |
-| ------ | ---------- | ------------------------------------------------------------ |
-| 0      | ✅         | Setup environment, skeleton, smoke test test-network         |
-| 1      | ✅         | Chaincode `harvest-cc` + mock CLI invoker (Sprint 1 milestone M1) |
-| 2      | ✅         | Node bridge + Flask + Dockerfile từng service (M2)           |
-| 3      | ✅         | Docker Compose master + start.sh/stop.sh + UAT + docs (M3)   |
+Xem [docs/architecture.md](docs/architecture.md) — có sơ đồ tuần tự 1 ảnh đi qua các tầng.
 
-## Tài liệu thêm
-
-- [Sprint plan](docs/sprint-plan.md) — DoD + risk register
-- [Architecture](docs/architecture.md) — sequence + decisions
-- [Runbook](docs/runbook.md) — setup từ 0 + troubleshooting
-- [Demo script](docs/video-script.md) — 3-min storyboard
+Tóm tắt: ảnh đến Flask → Flask gọi AI phân loại + băm ảnh → gửi sang Node bridge → bridge nói chuyện với Hyperledger Fabric → record được commit và lưu vào CouchDB.
 
 ## License
 
